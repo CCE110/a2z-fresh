@@ -22,13 +22,24 @@ app.post('/api/bland', async (req, res) => {
     setTimeout(async () => {
       try {
         console.log('📡 Fetching transcript from Bland...');
+        
+        // Try different authorization formats
         const blandResponse = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
+          method: 'GET',
           headers: { 
-            'authorization': 'org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
+            'Authorization': 'org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969',
+            'Content-Type': 'application/json'
           }
         });
         
-        const data = await blandResponse.json();
+        console.log('Response status:', blandResponse.status);
+        const contentType = blandResponse.headers.get('content-type');
+        console.log('Content-Type:', contentType);
+        
+        const textResponse = await blandResponse.text();
+        console.log('Response preview:', textResponse.substring(0, 300));
+        
+        const data = JSON.parse(textResponse);
         console.log('✅ Got transcript, length:', data.concatenated_transcript?.length);
         
         if (data.concatenated_transcript) {
@@ -55,6 +66,7 @@ app.post('/api/bland', async (req, res) => {
         }
       } catch (error) {
         console.error('❌ Error:', error.message);
+        console.error('Stack:', error.stack);
       }
     }, 5000);
   }
