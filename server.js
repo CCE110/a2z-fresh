@@ -19,21 +19,17 @@ app.post('/api/bland', async (req, res) => {
     const callId = req.body.call_id;
     console.log('🔴 Call ended:', callId);
     
+    // Log the entire webhook body to see what Bland sends
+    console.log('Full webhook payload:', JSON.stringify(req.body, null, 2));
+    
     setTimeout(async () => {
       try {
-        console.log('📡 Fetching transcript from Bland...');
+        // Get transcript directly from webhook data
+        const transcript = req.body.concatenated_transcript || req.body.transcript;
+        const summary = req.body.summary;
         
-        const blandResponse = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
-          method: 'GET',
-          headers: { 
-            'authorization': '9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
-          }
-        });
-        
-        const data = await blandResponse.json();
-        console.log('✅ Got transcript, length:', data.concatenated_transcript?.length);
-        
-        if (data.concatenated_transcript) {
+        if (transcript) {
+          console.log('✅ Got transcript from webhook, length:', transcript.length);
           console.log('📧 Sending to Supabase...');
           
           const emailResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/send-job-email`, {
@@ -43,8 +39,8 @@ app.post('/api/bland', async (req, res) => {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              transcript: data.concatenated_transcript,
-              summary: data.summary,
+              transcript: transcript,
+              summary: summary,
               call_id: callId
             })
           });
@@ -52,13 +48,16 @@ app.post('/api/bland', async (req, res) => {
           if (emailResponse.ok) {
             console.log('✅ EMAIL SENT SUCCESSFULLY!');
           } else {
-            console.error('❌ Email failed:', await emailResponse.text());
+            const errorText = await emailResponse.text();
+            console.error('❌ Email failed:', errorText);
           }
+        } else {
+          console.log('❌ No transcript in webhook data');
         }
       } catch (error) {
         console.error('❌ Error:', error.message);
       }
-    }, 5000);
+    }, 2000); // Reduced wait time since we're not fetching
   }
 });
 
