@@ -1,7 +1,6 @@
 const express = require('express');
-const sgMail = require('@sendgrid/mail');
-
 const app = express();
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
@@ -11,11 +10,6 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
-
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  console.log('✓ SendGrid initialized');
-}
 
 app.post('/api/bland', async (req, res) => {
   console.log('WEBHOOK:', req.body.message);
@@ -27,26 +21,37 @@ app.post('/api/bland', async (req, res) => {
     
     setTimeout(async () => {
       try {
-        // Correct Bland API format with Bearer token
-        const response = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
-          method: 'GET',
+        console.log('📡 Fetching transcript from Bland...');
+        const blandResponse = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
           headers: { 
-            'Authorization': 'sk-org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
+            'authorization': 'org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
           }
         });
         
-        const data = await response.json();
+        const data = await blandResponse.json();
+        console.log('✅ Got transcript, length:', data.concatenated_transcript?.length);
         
         if (data.concatenated_transcript) {
-          await sgMail.send({
-            to: 'admin@a2zh.com.au',
-            from: 'rob@kvell.net',
-            subject: 'A2Z Job Recording',
-            text: data.concatenated_transcript
+          console.log('📧 Sending to Supabase Edge Function...');
+          
+          const emailResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/send-job-email`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.SUPABASE_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              transcript: data.concatenated_transcript,
+              summary: data.summary,
+              call_id: callId
+            })
           });
-          console.log('✅ EMAIL SENT!');
-        } else {
-          console.log('❌ No transcript found');
+          
+          if (emailResponse.ok) {
+            console.log('✅ EMAIL SENT SUCCESSFULLY!');
+          } else {
+            console.error('❌ Email failed:', await emailResponse.text());
+          }
         }
       } catch (error) {
         console.error('❌ Error:', error.message);
