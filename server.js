@@ -11,26 +11,44 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Store call data temporarily
+const callData = {};
+
 app.post('/api/bland', async (req, res) => {
-  console.log('WEBHOOK:', req.body.message);
   res.json({ success: true });
   
+  const callId = req.body.call_id;
+  
+  // Log all webhooks to understand the flow
+  console.log('WEBHOOK:', req.body.message, '| Call:', callId);
+  
+  // Store any data that comes through
+  if (!callData[callId]) {
+    callData[callId] = {};
+  }
+  
+  // Collect transcript and summary from any webhook
+  if (req.body.concatenated_transcript) {
+    callData[callId].transcript = req.body.concatenated_transcript;
+  }
+  if (req.body.transcript) {
+    callData[callId].transcript = req.body.transcript;
+  }
+  if (req.body.summary) {
+    callData[callId].summary = req.body.summary;
+  }
+  
+  // When call ends, send email with collected data
   if (req.body.message && req.body.message.includes("Closing call stream")) {
-    const callId = req.body.call_id;
     console.log('🔴 Call ended:', callId);
-    
-    // Log the entire webhook body to see what Bland sends
-    console.log('Full webhook payload:', JSON.stringify(req.body, null, 2));
     
     setTimeout(async () => {
       try {
-        // Get transcript directly from webhook data
-        const transcript = req.body.concatenated_transcript || req.body.transcript;
-        const summary = req.body.summary;
+        const data = callData[callId];
         
-        if (transcript) {
-          console.log('✅ Got transcript from webhook, length:', transcript.length);
-          console.log('📧 Sending to Supabase...');
+        if (data && data.transcript) {
+          console.log('✅ Got transcript, length:', data.transcript.length);
+          console.log('📧 Sending email...');
           
           const emailResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/send-job-email`, {
             method: 'POST',
@@ -39,8 +57,8 @@ app.post('/api/bland', async (req, res) => {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              transcript: transcript,
-              summary: summary,
+              transcript: data.transcript,
+              summary: data.summary || 'Job Recording',
               call_id: callId
             })
           });
@@ -48,16 +66,18 @@ app.post('/api/bland', async (req, res) => {
           if (emailResponse.ok) {
             console.log('✅ EMAIL SENT SUCCESSFULLY!');
           } else {
-            const errorText = await emailResponse.text();
-            console.error('❌ Email failed:', errorText);
+            console.error('❌ Email failed:', await emailResponse.text());
           }
+          
+          // Cleanup
+          delete callData[callId];
         } else {
-          console.log('❌ No transcript in webhook data');
+          console.log('❌ No transcript found for call:', callId);
         }
       } catch (error) {
         console.error('❌ Error:', error.message);
       }
-    }, 2000); // Reduced wait time since we're not fetching
+    }, 2000);
   }
 });
 
