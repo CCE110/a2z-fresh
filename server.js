@@ -4,7 +4,6 @@ const sgMail = require('@sendgrid/mail');
 const app = express();
 app.use(express.json());
 
-// Health check endpoint
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'a2z-fresh' });
 });
@@ -13,7 +12,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Log all requests
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
@@ -45,11 +43,15 @@ app.post('/api/bland', async (req, res) => {
         
         const response = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
           headers: { 
-            'Authorization': 'org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
+            'authorization': 'org_9758994f0c3e0bbd36b5fd7fc06dc0a84a66a022964733c85749be98cecd430514699510f86e8d33ad4969'
           }
         });
         
-        const data = await response.json();
+        console.log('Response status:', response.status);
+        const text = await response.text();
+        console.log('Response preview:', text.substring(0, 200));
+        
+        const data = JSON.parse(text);
         console.log('📄 Got transcript, length:', data.concatenated_transcript?.length || 0);
         
         if (data.concatenated_transcript) {
@@ -64,13 +66,14 @@ app.post('/api/bland', async (req, res) => {
         }
       } catch (error) {
         console.error('❌ ERROR:', error.message);
+        console.error('Stack:', error.stack);
       }
     }, 5000);
   }
 });
 
 const PORT = process.env.PORT || 8080;
-const server = app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`✓ Server listening on 0.0.0.0:${PORT}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
