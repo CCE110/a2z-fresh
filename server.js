@@ -4,7 +4,16 @@ const sgMail = require('@sendgrid/mail');
 const app = express();
 app.use(express.json());
 
-// Log everything
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'a2z-fresh' });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Log all requests
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
@@ -31,8 +40,8 @@ app.post('/api/bland', async (req, res) => {
     
     setTimeout(async () => {
       try {
-        console.log('⏳ Waiting 5 seconds for Bland to process...');
-        console.log('📡 Fetching transcript from Bland API...');
+        console.log('⏳ Waiting 5 seconds...');
+        console.log('📡 Fetching transcript...');
         
         const response = await fetch(`https://api.bland.ai/v1/calls/${callId}`, {
           headers: { 
@@ -41,8 +50,7 @@ app.post('/api/bland', async (req, res) => {
         });
         
         const data = await response.json();
-        console.log('📄 Got response from Bland');
-        console.log('Transcript length:', data.concatenated_transcript?.length || 0);
+        console.log('📄 Got transcript, length:', data.concatenated_transcript?.length || 0);
         
         if (data.concatenated_transcript) {
           console.log('📧 Sending email...');
@@ -52,23 +60,18 @@ app.post('/api/bland', async (req, res) => {
             subject: 'A2Z Job Recording',
             text: (data.summary || 'No summary') + '\n\nTranscript:\n' + data.concatenated_transcript
           });
-          console.log('✅ EMAIL SENT SUCCESSFULLY!');
-        } else {
-          console.log('⚠️ No transcript in response');
+          console.log('✅ EMAIL SENT!');
         }
       } catch (error) {
         console.error('❌ ERROR:', error.message);
-        console.error('Stack:', error.stack);
       }
     }, 5000);
-  } else {
-    console.log('ℹ️ Not a call end message, ignoring');
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 8080;
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`✓ Server running on port ${PORT}`);
+  console.log(`✓ Server listening on 0.0.0.0:${PORT}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
