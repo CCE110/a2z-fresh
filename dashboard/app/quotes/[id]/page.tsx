@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { use } from 'react'
+import QuoteEditMode from '@/components/QuoteEditMode'
 
 interface Quote {
   id: string
@@ -43,6 +44,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params)
   const [quote, setQuote] = useState<Quote | null>(null)
   const [items, setItems] = useState<QuoteItem[]>([])
+  const [isEditMode, setIsEditMode] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -71,12 +73,21 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       
       if (itemsError) throw itemsError
       setItems(itemsData || [])
-      console.log('Items loaded:', itemsData)
     } catch (error) {
       console.error('Error loading quote:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSaveEdit = () => {
+    setIsEditMode(false)
+    loadQuote()
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false)
+    loadQuote()
   }
 
   if (loading) {
@@ -109,6 +120,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
+        {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={() => router.push('/')}
@@ -119,8 +131,26 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             </svg>
             Back to Quotes
           </button>
+          
+          {!isEditMode && items.length > 0 && (
+            <div className="space-x-2">
+              <button
+                onClick={() => setIsEditMode(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Edit Quote
+              </button>
+              <button className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                Generate PDF
+              </button>
+              <button className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                Email Client
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* Quote Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex justify-between items-start">
             <div>
@@ -154,6 +184,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
+        {/* Client Information */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Client Information</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -168,82 +199,105 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Quote Items</h2>
-          </div>
+        {/* Quote Items - View or Edit Mode */}
+        {isEditMode ? (
+          <QuoteEditMode
+            quoteId={quote.id}
+            items={items}
+            subtotal={quote.subtotal_ex_gst}
+            gstAmount={quote.gst_amount}
+            total={quote.total_inc_gst}
+            onSave={handleSaveEdit}
+            onCancel={handleCancelEdit}
+          />
+        ) : (
+          <>
+            {/* Line Items - View Mode */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900">Quote Items</h2>
+              </div>
 
-          {Object.entries(itemsBySection).map(([section, sectionItems]) => {
-            const sectionTotal = sectionTotals.find(s => s.section === section)?.total || 0
-            
-            return (
-              <div key={section} className="border-b border-gray-200 last:border-b-0">
-                <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
-                  <h3 className="font-semibold text-gray-900 capitalize">
-                    {section.replace('_', ' ')}
-                  </h3>
-                  <div className="text-sm font-medium text-gray-700">
-                    Section Total: ${sectionTotal.toFixed(2)}
-                  </div>
+              {items.length === 0 ? (
+                <div className="px-6 py-12 text-center text-gray-500">
+                  No items in this quote
                 </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {sectionItems.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900">{item.item_name}</div>
-                            {item.description && (
-                              <div className="text-xs text-gray-500 mt-1">{item.description}</div>
-                            )}
-                            {item.ai_suggested && (
-                              <div className="mt-1">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                  AI Suggested {item.ai_confidence && `- ${(item.ai_confidence * 100).toFixed(0)}%`}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{item.unit}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900">${item.unit_price.toFixed(2)}</td>
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900">${item.total_price.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              ) : (
+                Object.entries(itemsBySection).map(([section, sectionItems]) => {
+                  const sectionTotal = sectionTotals.find(s => s.section === section)?.total || 0
+                  
+                  return (
+                    <div key={section} className="border-b border-gray-200 last:border-b-0">
+                      <div className="bg-gray-50 px-6 py-3 flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-900 capitalize">
+                          {section.replace('_', ' ')}
+                        </h3>
+                        <div className="text-sm font-medium text-gray-700">
+                          Section Total: ${sectionTotal.toFixed(2)}
+                        </div>
+                      </div>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {sectionItems.map((item) => (
+                              <tr key={item.id}>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm font-medium text-gray-900">{item.item_name}</div>
+                                  {item.description && (
+                                    <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+                                  )}
+                                  {item.ai_suggested && (
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                        AI Suggested {item.ai_confidence && `- ${(item.ai_confidence * 100).toFixed(0)}%`}
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-900">{item.quantity}</td>
+                                <td className="px-6 py-4 text-sm text-gray-500">{item.unit}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900">${item.unit_price.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900">${item.total_price.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Totals */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="max-w-md ml-auto space-y-2">
+                <div className="flex justify-between text-gray-600">
+                  <span>Subtotal (ex GST):</span>
+                  <span className="font-medium">${quote.subtotal_ex_gst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>GST (10%):</span>
+                  <span className="font-medium">${quote.gst_amount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold text-gray-900 border-t pt-2">
+                  <span>Total (inc GST):</span>
+                  <span>${quote.total_inc_gst.toFixed(2)}</span>
                 </div>
               </div>
-            )
-          })}
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="max-w-md ml-auto space-y-2">
-            <div className="flex justify-between text-gray-600">
-              <span>Subtotal (ex GST):</span>
-              <span className="font-medium">${quote.subtotal_ex_gst.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-gray-600">
-              <span>GST (10%):</span>
-              <span className="font-medium">${quote.gst_amount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold text-gray-900 border-t pt-2">
-              <span>Total (inc GST):</span>
-              <span>${quote.total_inc_gst.toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   )
