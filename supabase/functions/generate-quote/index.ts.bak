@@ -86,11 +86,7 @@ RESPOND WITH VALID JSON ONLY:
       })
     })
 
-    if (!claudeResponse.ok) {
-      const errorText = await claudeResponse.text()
-      console.error('Claude API Error:', claudeResponse.status, errorText)
-      throw new Error(`Claude API error: ${claudeResponse.status} - ${errorText}`)
-    }
+    if (!claudeResponse.ok) throw new Error('Claude API error')
 
     const claudeData = await claudeResponse.json()
     const aiResponse = claudeData.content[0].text
