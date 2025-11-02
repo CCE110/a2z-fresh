@@ -15,8 +15,9 @@ serve(async (req) => {
 
   try {
     console.log('🤖 Starting AI quote generation...')
+    
     const { job_call_id } = await req.json()
-
+    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
@@ -51,7 +52,7 @@ ${catalog.map(item => `- ${item.item_code}: ${item.item_name} - $${item.base_pri
 
 Create a detailed quote with line items from the catalog. Always include labor ($95/hour) and travel ($65/hour, typically 1 hour).
 
-RESPOND WITH VALID JSON ONLY:
+RESPOND WITH VALID JSON ONLY (do not include pricing_catalog_id field):
 {
   "quote_items": [
     {
@@ -61,7 +62,6 @@ RESPOND WITH VALID JSON ONLY:
       "quantity": 1,
       "unit": "each",
       "unit_price": 100,
-      "pricing_catalog_id": null,
       "ai_confidence": 0.9,
       "ai_reasoning": "why this item"
     }
@@ -71,11 +71,11 @@ RESPOND WITH VALID JSON ONLY:
   "assumptions": ["Assumptions made"]
 }`
 
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')!
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': anthropicKey!,
+        'x-api-key': anthropicKey,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
@@ -89,7 +89,7 @@ RESPOND WITH VALID JSON ONLY:
     if (!claudeResponse.ok) {
       const errorText = await claudeResponse.text()
       console.error('Claude API Error:', claudeResponse.status, errorText)
-      throw new Error(`Claude API error: ${claudeResponse.status} - ${errorText}`)
+      throw new Error(`Claude API error: ${claudeResponse.status}`)
     }
 
     const claudeData = await claudeResponse.json()
@@ -106,7 +106,7 @@ RESPOND WITH VALID JSON ONLY:
     const avgConfidence = quoteData.quote_items.reduce((sum, item) => sum + item.ai_confidence, 0) / quoteData.quote_items.length
 
     const { data: quoteNumberData } = await supabase.rpc('generate_quote_number')
-    const quoteNumber = quoteNumberData || `A2Z-${new Date().toISOString().slice(2,7).replace('-','')}-0001`
+    const quoteNumber = quoteNumberData || `A2Z-${new Date().toISOString().slice(2, 7).replace('-', '')}-0001`
 
     const { data: savedQuote, error: quoteError } = await supabase
       .from('quotes')
@@ -132,46 +132,64 @@ RESPOND WITH VALID JSON ONLY:
       .select()
       .single()
 
-    if (quoteError) throw new Error('Failed to save quote')
-    console.log('✅ Quote saved')
+    if (quoteError) {
+      console.error('❌ Error saving quote:', quoteError)
+      throw new Error('Failed to save quote: ' + quoteError.message)
+    }
+
+    console.log('✅ Quote saved:', savedQuote.id)
 
     const itemsToInsert = quoteData.quote_items.map((item, index) => ({
       quote_id: savedQuote.id,
       section: item.section,
       sort_order: index + 1,
       item_name: item.item_name,
-      description: item.description,
+      description: item.description || '',
       quantity: item.quantity,
       unit: item.unit,
       unit_price: item.unit_price,
       total_price: item.quantity * item.unit_price,
-      pricing_catalog_id: item.pricing_catalog_id,
+      pricing_catalog_id: null,  // Always null - AI can't provide valid UUIDs
       ai_suggested: true,
       ai_confidence: item.ai_confidence,
-      ai_reasoning: item.ai_reasoning
+      ai_reasoning: item.ai_reasoning || ''
     }))
 
-    await supabase.from('quote_items').insert(itemsToInsert)
-    console.log('✅ Items saved:', itemsToInsert.length)
+    console.log('📝 Inserting', itemsToInsert.length, 'items...')
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        quote_id: savedQuote.id,
-        quote_number: quoteNumber,
-        total_inc_gst: total,
-        confidence_avg: avgConfidence,
-        items_count: itemsToInsert.length,
-        generation_time_ms: Date.now() - startTime
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
+    const { data: insertedItems, error: itemsError } = await supabase
+      .from('quote_items')
+      .insert(itemsToInsert)
+      .select()
+
+    if (itemsError) {
+      console.error('❌ ERROR INSERTING ITEMS:', itemsError)
+      throw new Error('Failed to save items: ' + itemsError.message)
+    }
+
+    console.log('✅ Items saved:', insertedItems?.length || 0)
+
+    return new Response(JSON.stringify({
+      success: true,
+      quote_id: savedQuote.id,
+      quote_number: quoteNumber,
+      total_inc_gst: total,
+      confidence_avg: avgConfidence,
+      items_count: insertedItems?.length || 0,
+      generation_time_ms: Date.now() - startTime
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    })
 
   } catch (error) {
     console.error('❌ Error:', error)
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
   }
 })

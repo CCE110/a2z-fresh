@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { use } from 'react'
+import Image from 'next/image'
 import QuoteEditMode from '@/components/QuoteEditMode'
 import AddItemsModal from '@/components/AddItemsModal'
 import StatusWorkflow from '@/components/StatusWorkflow'
+import EditClientModal from '@/components/EditClientModal'
 import { generateQuotePDF } from '@/lib/pdfGenerator'
 
 interface Quote {
@@ -49,6 +51,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [items, setItems] = useState<QuoteItem[]>([])
   const [isEditMode, setIsEditMode] = useState(false)
   const [showAddItems, setShowAddItems] = useState(false)
+  const [showEditClient, setShowEditClient] = useState(false)
   const [loading, setLoading] = useState(true)
   const [generatingPDF, setGeneratingPDF] = useState(false)
 
@@ -171,14 +174,45 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
 
+        <div className="bg-white rounded-lg shadow-sm p-8 mb-6">
+          <div className="flex justify-between items-start">
+            <div className="flex items-start gap-6">
+              <Image
+                src="/a2z-logo.jpg"
+                alt="A2Z Hydraulics"
+                width={120}
+                height={120}
+                className="object-contain"
+              />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">A2Z Hydraulics PTY LTD</h1>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>ABN: 47639999538</div>
+                  <div>QBCC Licence: 15297619</div>
+                  <div>Shop 3, 156 Boundary Street</div>
+                  <div>West End Qld 4101</div>
+                  <div className="mt-2">
+                    <div>Phone: 0427333288</div>
+                    <div>Email: <a href="mailto:Supervisor@a2zh.com.au" className="text-blue-600 hover:underline">Supervisor@a2zh.com.au</a></div>
+                    <div>Web: <a href="https://A2zhydraulics.com.au" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">A2zhydraulics.com.au</a></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold text-gray-900 mb-2">QUOTATION</div>
+              <div className="text-lg font-semibold text-gray-700">{quote.quote_number}</div>
+              <div className="text-sm text-gray-600 mt-1">
+                Date: {new Date(quote.created_at).toLocaleDateString('en-AU')}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {quote.quote_number}
-              </h1>
               <div className="space-y-1 text-sm text-gray-600">
-                <div>Date: {new Date(quote.created_at).toLocaleDateString()}</div>
                 <div className="flex items-center gap-2">
                   <span>Status:</span>
                   <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${
@@ -215,7 +249,15 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Client Information</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Client Information</h2>
+            <button
+              onClick={() => setShowEditClient(true)}
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              ✏️ Edit
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <div className="text-gray-600">Client Name</div>
@@ -367,6 +409,19 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           quoteId={quote.id}
           onClose={() => setShowAddItems(false)}
           onItemsAdded={handleItemsAdded}
+        />
+      )}
+
+      {showEditClient && (
+        <EditClientModal
+          quoteId={quote.id}
+          currentName={quote.client_name}
+          currentAddress={quote.project_address}
+          onClose={() => setShowEditClient(false)}
+          onSave={() => {
+            setShowEditClient(false)
+            loadQuote()
+          }}
         />
       )}
     </div>
